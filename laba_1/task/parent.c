@@ -1,5 +1,3 @@
-#include <stdint.h>
-#include <stdbool.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -45,6 +43,8 @@ status_code get_string(char **string, int *len_string) {
 
 
 int main(){
+    mkfifo("childrens_pipe", 0777);
+
     const char* args[] = {
         "./child.",
         NULL

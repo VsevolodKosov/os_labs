@@ -1,5 +1,3 @@
-#include <stdint.h>
-#include <stdbool.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <unistd.h>
