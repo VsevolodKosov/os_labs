@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
-#include <sys/time.h>  // Для gettimeofday()
+#include <sys/time.h>  
 
 // Структура для передачи данных в поток
 typedef struct {
@@ -12,7 +12,7 @@ typedef struct {
     int low;
     int cnt;
     int dir;
-    int thread_id;  // Добавим идентификатор потока для вывода
+    int thread_id; 
 } SortArgs;
 
 // Функция для слияния битонических последовательностей
@@ -60,16 +60,12 @@ void write_to_file(int arr[], int n, const char *filename) {
         perror("Error opening file");
         exit(1);
     }
-
-    // Запись строки "Result: " в файл
+   
     fprintf(file, "Result: ");
-
-    // Запись элементов массива в файл
     for (int i = 0; i < n; i++) {
         fprintf(file, "%d ", arr[i]);
     }
 
-    // Закрытие файла
     fclose(file);
 }
 
@@ -79,15 +75,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Чтение числа потоков из командной строки
     int num_threads = atoi(argv[1]);
     if (num_threads <= 0) {
         fprintf(stderr, "Invalid number of threads\n");
         return 1;
     }
 
-    // Увеличиваем размер массива для тестирования
-    int n = 1000000;  // Увеличили размер массива до 1,000,000 элементов
+    int n = 1000000;  
     int *arr = (int*)malloc(n * sizeof(int));
 
     if (arr == NULL) {
@@ -95,55 +89,47 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Заполнение массива случайными числами
     srand(time(NULL));
     for (int i = 0; i < n; i++) {
         arr[i] = rand() % 1000;
     }
 
-    // Засекаем время выполнения с использованием gettimeofday
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 
-    // Массив потоков
     pthread_t *threads = (pthread_t*)malloc(num_threads * sizeof(pthread_t));
     SortArgs *sort_args = (SortArgs*)malloc(num_threads * sizeof(SortArgs));
 
     int chunk_size = n / num_threads;
 
-    // Создаем потоки для многопоточной сортировки
     for (int i = 0; i < num_threads; i++) {
         sort_args[i].arr = arr;
         sort_args[i].low = i * chunk_size;
         sort_args[i].cnt = (i == num_threads - 1) ? n - (i * chunk_size) : chunk_size;
-        sort_args[i].dir = 1;  // По возрастанию
-        sort_args[i].thread_id = i;  // Присваиваем уникальный идентификатор потока
+        sort_args[i].dir = 1;  
+        sort_args[i].thread_id = i;  
 
         pthread_create(&threads[i], NULL, bitonic_sort_thread, &sort_args[i]);
     }
 
-    // Ждем завершения всех потоков
+   
     for (int i = 0; i < num_threads; i++) {
         pthread_join(threads[i], NULL);
     }
 
-    // Слияние частей после многопоточной сортировки
+    
     bitonic_merge(arr, 0, n, 1);
-
-    // Засекаем время завершения
     gettimeofday(&end_time, NULL);
 
-    // Рассчитываем время выполнения
     double time_taken = (end_time.tv_sec - start_time.tv_sec) + 
                         (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
 
-    // Запись отсортированного массива в файл
+    
     write_to_file(arr, n, "output.txt");
 
-    // Выводим время выполнения
+    
     printf("Time taken for sorting: %.6f seconds\n", time_taken);
 
-    // Освобождение памяти
     free(arr);
     free(threads);
     free(sort_args);
