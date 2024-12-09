@@ -6,7 +6,6 @@
 #include <time.h>
 #include <sys/time.h>  
 
-// Структура для передачи данных в поток
 typedef struct {
     int *arr;
     int low;
@@ -15,7 +14,6 @@ typedef struct {
     int thread_id; 
 } SortArgs;
 
-// Функция для слияния битонических последовательностей
 void bitonic_merge(int arr[], int low, int cnt, int dir) {
     if (cnt > 1) {
         int k = cnt / 2;
@@ -31,22 +29,20 @@ void bitonic_merge(int arr[], int low, int cnt, int dir) {
     }
 }
 
-// Функция битонической сортировки
 void bitonic_sort(int arr[], int low, int cnt, int dir) {
     if (cnt > 1) {
         int k = cnt / 2;
-        bitonic_sort(arr, low, k, 1);  // сортировка по возрастанию
-        bitonic_sort(arr, low + k, k, 0);  // сортировка по убыванию
+        bitonic_sort(arr, low, k, 1);  
+        bitonic_sort(arr, low + k, k, 0); 
         bitonic_merge(arr, low, cnt, dir);
     }
 }
 
-// Многопоточная обертка для битонической сортировки
+
 void* bitonic_sort_thread(void *args) {
     SortArgs *sort_args = (SortArgs*)args;
     //printf("Thread %d started\n", sort_args->thread_id);  // Выводим информацию о запуске потока
 
-    // Выполнение сортировки в потоке
     bitonic_sort(sort_args->arr, sort_args->low, sort_args->cnt, sort_args->dir);
 
     //printf("Thread %d finished\n", sort_args->thread_id);  // Выводим информацию о завершении потока
