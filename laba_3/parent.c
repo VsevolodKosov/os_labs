@@ -25,7 +25,7 @@ status_code get_string(char **string, int *len_string) {
         c = getchar();
         if (c == EOF || c == '\n') break;  
         (*string)[*len_string] = c;       
-        (*len_string)++;                  // Length increases
+        (*len_string)++;                  
 
         if (*len_string == capacity_string) {
             capacity_string *= 2;
@@ -44,9 +44,6 @@ status_code get_string(char **string, int *len_string) {
 }
 
 int main() {
-    // Убираем создание именованного канала
-    // mkfifo("childrens_pipe", 0777); // Это больше не нужно
-
     const char* args[] = {
         "./child1", NULL
     };
@@ -59,7 +56,6 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    // Создаем разделяемую память
     int shm_fd = shm_open("child_shm", O_CREAT | O_RDWR, 0666);
     if (shm_fd == -1) {
         const char message[] = "SharedMemoryError: Failed to create shared memory";
@@ -67,7 +63,6 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    // Устанавливаем размер разделяемой памяти
     ftruncate(shm_fd, sizeof(int) + len_string * sizeof(char));
 
     void *addr = mmap(NULL, sizeof(int) + len_string * sizeof(char), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
@@ -78,7 +73,6 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    // Копируем длину и строку в разделяемую память
     int *shared_len_string = (int *) addr;
     char *shared_string = (char *)(shared_len_string + 1);
 
@@ -87,7 +81,6 @@ int main() {
 
     free(string);
 
-    // Порождение процессов
     int pid1 = fork();
     if (pid1 == -1){
         const char message[] = "ProcessError: Failed to create a new process";
@@ -108,18 +101,14 @@ int main() {
         execv("./child2", (char **) args);
     }
 
-    // Ждем завершения дочерних процессов
     wait(NULL);
     wait(NULL);
 
-    // Чтение результата из разделяемой памяти
     int *final_len = (int *) addr;
     char *final_string = (char *)(final_len + 1);
     
-    // Выводим результат
     write(STDOUT_FILENO, final_string, *final_len);
 
-    // Освобождение ресурсов
     munmap(addr, sizeof(int) + len_string * sizeof(char));
     close(shm_fd);
     shm_unlink("child_shm");

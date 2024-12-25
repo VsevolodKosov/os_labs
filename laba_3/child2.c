@@ -51,7 +51,6 @@ int main() {
     string[*len_string] = '\n';
     (*len_string)++;
 
-    // Данные записаны в общую память, теперь родитель сможет их прочитать
     munmap(addr, sizeof(int) + sizeof(char) * 1024);
     close(shm_fd);
 
