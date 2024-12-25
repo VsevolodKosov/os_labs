@@ -1,23 +1,17 @@
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include <semaphore.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/wait.h>
 
-#define SHM_NAME "/shared_memory"
-#define SEM_NAME "/semaphore"
-
-typedef enum{
+typedef enum {
     OK,
     MemoryError
-}status_code;
+} status_code;
 
-// Функция для получения строки с клавиатуры
 status_code get_string(char **string, int *len_string) {
     char c;
     *len_string = 0;
@@ -31,7 +25,7 @@ status_code get_string(char **string, int *len_string) {
         c = getchar();
         if (c == EOF || c == '\n') break;  
         (*string)[*len_string] = c;       
-        (*len_string)++;                  // Увеличиваем длину строки
+        (*len_string)++;                  // Length increases
 
         if (*len_string == capacity_string) {
             capacity_string *= 2;
@@ -50,108 +44,85 @@ status_code get_string(char **string, int *len_string) {
 }
 
 int main() {
-    const char *args[] = { "./child1", NULL };  // Путь к дочерним процессам
+    // Убираем создание именованного канала
+    // mkfifo("childrens_pipe", 0777); // Это больше не нужно
 
-    // Шаг 1: Создаем разделяемую память
-    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0777);
-    if (shm_fd == -1) {
-        perror("shm_open failed");
-        exit(EXIT_FAILURE);
-    }
+    const char* args[] = {
+        "./child1", NULL
+    };
 
-    ftruncate(shm_fd, sizeof(int) + 1024);  // Размер разделяемой памяти (длина строки + сама строка)
-
-    // Отображаем память в адресное пространство процесса
-    char *shared_memory = (char *)mmap(NULL, sizeof(int) + 1024, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (shared_memory == MAP_FAILED) {
-        perror("mmap failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Шаг 2: Создаем семафор для синхронизации
-    sem_t *sem = sem_open(SEM_NAME, O_CREAT, 0777, 1);  // Инициализируем семафор значением 1
-    if (sem == SEM_FAILED) {
-        perror("sem_open failed");
-        exit(EXIT_FAILURE);
-    }
-
-    // Шаг 3: Считываем строку с клавиатуры
     int len_string;
     char *string;
-    if (get_string(&string, &len_string) == MemoryError) {
+    if (get_string(&string, &len_string) == MemoryError){
         const char message[] = "MemoryError: Failed to allocate memory";
         write(STDERR_FILENO, message, sizeof(message));
         exit(EXIT_FAILURE);
     }
 
-    // Сохраняем длину строки в разделяемую память
-    memcpy(shared_memory, &len_string, sizeof(int));
-    memcpy(shared_memory + sizeof(int), string, len_string);
-    free(string);  // Освобождаем память для строки
-
-    // Шаг 4: Создаем дочерние процессы
-    int pid1 = fork();
-    if (pid1 == -1) {
-        perror("fork failed for child1");
+    // Создаем разделяемую память
+    int shm_fd = shm_open("child_shm", O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        const char message[] = "SharedMemoryError: Failed to create shared memory";
+        write(STDERR_FILENO, message, sizeof(message));
         exit(EXIT_FAILURE);
     }
-    else if (pid1 == 0) {  // Первый дочерний процесс
-        sem_wait(sem);  // Ожидаем доступа к разделяемой памяти
 
-        // Извлекаем строку из разделяемой памяти
-        int child1_len = *((int *)shared_memory);
-        char *child1_string = shared_memory + sizeof(int);
+    // Устанавливаем размер разделяемой памяти
+    ftruncate(shm_fd, sizeof(int) + len_string * sizeof(char));
 
-        // Преобразуем строку в нижний регистр
-        to_lower(child1_string, child1_len);
+    void *addr = mmap(NULL, sizeof(int) + len_string * sizeof(char), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (addr == MAP_FAILED) {
+        const char message[] = "MemoryMappingError: Failed to map shared memory";
+        write(STDERR_FILENO, message, sizeof(message));
+        close(shm_fd);
+        exit(EXIT_FAILURE);
+    }
 
-        // Записываем обратно в разделяемую память
-        memcpy(shared_memory + sizeof(int), child1_string, child1_len);
+    // Копируем длину и строку в разделяемую память
+    int *shared_len_string = (int *) addr;
+    char *shared_string = (char *)(shared_len_string + 1);
 
-        sem_post(sem);  // Освобождаем доступ к разделяемой памяти
-        exit(EXIT_SUCCESS);
+    *shared_len_string = len_string;
+    memcpy(shared_string, string, len_string);
+
+    free(string);
+
+    // Порождение процессов
+    int pid1 = fork();
+    if (pid1 == -1){
+        const char message[] = "ProcessError: Failed to create a new process";
+        write(STDERR_FILENO, message, sizeof(message));
+        exit(EXIT_FAILURE);
+    }
+    else if (pid1 == 0){
+        execv("./child1", (char **) args);
     }
 
     int pid2 = fork();
-    if (pid2 == -1) {
-        perror("fork failed for child2");
+    if (pid2 == -1){
+        const char message[] = "ProcessError: Failed to create a new process";
+        write(STDERR_FILENO, message, sizeof(message));
         exit(EXIT_FAILURE);
     }
-    else if (pid2 == 0) {  // Второй дочерний процесс
-        sem_wait(sem);  // Ожидаем доступа к разделяемой памяти
-
-        // Извлекаем строку из разделяемой памяти
-        int child2_len = *((int *)shared_memory);
-        char *child2_string = shared_memory + sizeof(int);
-
-        // Удаляем лишние пробелы
-        remove_extra_spaces(child2_string, &child2_len);
-
-        // Записываем обратно в разделяемую память
-        memcpy(shared_memory + sizeof(int), child2_string, child2_len);
-        *((int *)shared_memory) = child2_len;  // Обновляем длину строки
-
-        sem_post(sem);  // Освобождаем доступ к разделяемой памяти
-        exit(EXIT_SUCCESS);
+    else if (pid2 == 0){
+        execv("./child2", (char **) args);
     }
 
-    // Родительский процесс
-    wait(NULL);  // Ждем завершения дочерних процессов
+    // Ждем завершения дочерних процессов
+    wait(NULL);
     wait(NULL);
 
-    // Извлекаем итоговую строку из разделяемой памяти
-    int final_len = *((int *)shared_memory);
-    char *final_string = shared_memory + sizeof(int);
-
+    // Чтение результата из разделяемой памяти
+    int *final_len = (int *) addr;
+    char *final_string = (char *)(final_len + 1);
+    
     // Выводим результат
-    write(STDOUT_FILENO, final_string, final_len);
-    write(STDOUT_FILENO, "\n", 1);
+    write(STDOUT_FILENO, final_string, *final_len);
 
-    // Освобождаем ресурсы
-    sem_close(sem);
-    sem_unlink(SEM_NAME);
-    munmap(shared_memory, sizeof(int) + 1024);
-    shm_unlink(SHM_NAME);
+    // Освобождение ресурсов
+    munmap(addr, sizeof(int) + len_string * sizeof(char));
+    close(shm_fd);
+    shm_unlink("child_shm");
 
     return 0;
 }

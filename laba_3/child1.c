@@ -1,9 +1,10 @@
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
-#include <semaphore.h>
 
 void to_lower(char *string, int len_string) {
     for (int i = 0; i < len_string; ++i) {
@@ -14,27 +15,29 @@ void to_lower(char *string, int len_string) {
 }
 
 int main() {
-    // Получаем доступ к разделяемой памяти и семафору
-    sem_t *sem = sem_open("/semaphore", 0);
-    if (sem == SEM_FAILED) {
-        perror("sem_open failed");
+    int shm_fd = shm_open("child_shm", O_RDWR, 0666);
+    if (shm_fd == -1) {
+        const char message[] = "SharedMemoryError: Failed to open shared memory";
+        write(STDERR_FILENO, message, sizeof(message));
         exit(EXIT_FAILURE);
     }
 
-    // Чтение строки из разделяемой памяти
-    int len_string;
-    char *string = (char *)malloc(1024);  // Размер памяти для строки
-    if (string == NULL) {
-        perror("malloc failed");
+    void *addr = mmap(NULL, sizeof(int) + sizeof(char) * 1024, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (addr == MAP_FAILED) {
+        const char message[] = "MemoryMappingError: Failed to map shared memory";
+        write(STDERR_FILENO, message, sizeof(message));
+        close(shm_fd);
         exit(EXIT_FAILURE);
     }
 
-    // Преобразуем строку в нижний регистр
-    sem_wait(sem);
-    int len = *((int *)string);
-    to_lower(string, len);
-    sem_post(sem);
+    int *len_string = (int *) addr;
+    char *string = (char *)(len_string + 1);
 
-    free(string);
+    to_lower(string, *len_string);
+
+    // Данные записаны в общую память, теперь родитель сможет их прочитать
+    munmap(addr, sizeof(int) + sizeof(char) * 1024);
+    close(shm_fd);
+
     return 0;
 }
