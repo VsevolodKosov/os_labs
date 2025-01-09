@@ -67,13 +67,13 @@ int main(int argc, char **argv) {
 	}
 
 	void *library = dlopen(argv[1], RTLD_LOCAL | RTLD_NOW);
-	argc++;
-	if (argc > 2 && library) {
-		if (!library) {
-			const char msg[] = "Failed to load library\n";
-			write(STDERR_FILENO, msg, sizeof(msg));
-			return EXIT_FAILURE;
+	if (!library) {
+		const char msg[] = "Failed to load library\n";
+		write(STDERR_FILENO, msg, sizeof(msg));
+		return EXIT_FAILURE;
 		}
+	argc++;
+	if (argc > 2) {
 
 		allocator_create = dlsym(library, "allocator_create");
 		allocator_destroy = dlsym(library, "allocator_destroy");
